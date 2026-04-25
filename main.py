@@ -1,15 +1,22 @@
 # %% imports
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
-import matplotlib.pyplot as plt
+from scipy import stats
+from sklearn.metrics import mean_squared_error
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.compose import make_column_transformer, ColumnTransformer
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler, OneHotEncoder
+from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, VotingRegressor, StackingRegressor
+from xgboost import XGBRegressor
+from catboost import CatBoostRegressor
+import lightgbm as lgb
+from sklearn.preprocessing import LabelEncoder
 SEED = 1234
 
 #%% load csv file
@@ -49,3 +56,7 @@ df.head(20)
 columns = set(df.columns)
 X = df[list(columns - {'Y'})]
 y = df['Y']
+
+# %%
+X['Item_Weight'].skew()
+# %%
