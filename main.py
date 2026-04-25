@@ -3,9 +3,11 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from sklearn.metrics import mean_squared_error
-
+from sklearn . linear_model import LogisticRegression
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.compose import make_column_transformer, ColumnTransformer
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -19,17 +21,43 @@ import lightgbm as lgb
 from sklearn.preprocessing import LabelEncoder
 SEED = 1234
 
-#%% load csv file
+#%% 
 df = pd.read_csv("train.csv")
 
-#%% do preprocessing (Outlet_Size)
 for index,row in df.iterrows():
     if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
         df.at[index,'Outlet_Size'] = 'Small'
     elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
         df.at[index,'Outlet_Size'] = 'Medium'
-#%% do preprocessing (Item_Weight)
+
+# df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
 df = df.drop(columns=['Item_Weight'])
+
+df = df.drop(columns=['Item_Identifier'])
+
+df = pd.get_dummies(df, drop_first=True)
+
+columns = set(df.columns)
+X = df[list(columns - {'Y'})]
+y = df['Y']
+
+#%%
+X_train, X_test, y_train, y_test = train_test_split(
+     X, y, test_size = 0.2, # ratio
+       random_state = SEED, 
+       ) # to prevent bias
+
+len_reg = Pipeline([
+     ("model", LinearRegression( 
+         )) 
+         ]) 
+len_reg.fit(X_train, y_train)
+len_predTest = len_reg.predict(X_test)
+len_predTrain = len_reg.predict(X_train) 
+mae = mean_absolute_error(y_train, len_predTrain)
+mape = np.mean(np.abs((y_test - len_predTest) / y_test)) * 100
+print(mae)
+print (mape)
 
 #%% guess imputation thing
 freq = dict()
@@ -48,15 +76,10 @@ for index,row in df.iterrows():
         freq[tmp] = list(row)
 for key,val in freq.items():
     print(f"{key}: {sorted(val)}")
-
 # %% 20 head
 df.head(20)
 
-#%% data splitting
-columns = set(df.columns)
-X = df[list(columns - {'Y'})]
-y = df['Y']
-
 # %%
-X['Item_Weight'].skew()
+# by applying this => missing is random
+df.groupby('Item_Type')['Item_Weight'].apply(lambda x: x.isna().mean()*100) 
 # %%
