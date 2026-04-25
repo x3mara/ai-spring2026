@@ -1,4 +1,4 @@
-X1,X2,X3,X4,X5,X6,X7,X8,X9,X10,X11
+Item_Identifier,Item_Weight,Item_Fat_Content,Item_Visibility,Item_Type,Item_MRP,Outlet_Identifier,Outlet_Est_Year,Outlet_Size,Outlet_Location_Tier,Outlet_Type
 FDO37,,Low Fat,0.021273161,Breakfast,229.1326,OUT027,1985,Medium,Tier 3,Supermarket Type3
 FDV13,17.35,Regular,0.02758789,Canned,86.1856,OUT013,1987,High,Tier 3,Supermarket Type1
 FDF52,9.3,Low Fat,0.11178154,Frozen Foods,182.3292,OUT010,1998,,Tier 3,Grocery Store
