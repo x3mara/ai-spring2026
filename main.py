@@ -31,7 +31,12 @@ def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
         if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
             df.at[index,'Outlet_Size'] = 'Small'
         elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
-            df.at[index,'Outlet_Size'] = 'Medium'
+            df.at[index,'Outlet_Size'] = 'Small'
+        
+# some feature things 
+    df['Item_Visibility'] = np.log1p(df['Item_Visibility'])
+    df["weight_visibility"] = df["Item_Weight"] * df["Item_Visibility"]
+    df["price_per_weight"] = df["Item_MRP"] / df["Item_Weight"]
 
     if remove_nulls:
         # df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
@@ -90,8 +95,8 @@ do_test(len_reg)
 
 #%%
 XG_reg = XGBRegressor(
-        n_estimators=350,
-        learning_rate=0.055,
+        n_estimators=2000,
+        learning_rate=0.0175,
         max_depth=2,
         early_stopping_rounds=20,
         eval_metric = 'rmse',
@@ -132,5 +137,12 @@ do_test(XG_reg,remove_nulls=False)
 # # by applying this => missing is random
 # df.groupby('Item_Type')['Item_Weight'].apply(lambda x: x.isna().mean()*100) 
 # # %%
+
+# %%
+# %%
+rf = RandomForestRegressor(n_estimators=900, random_state=42)
+rf.fit(X_train, y_train)
+rf_pred = rf.predict(X_test)
+mae = mean_absolute_error(y_test, rf_pred)
 
 # %%
