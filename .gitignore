@@ -1,4 +1,5 @@
 output.csv
+catboost_info
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
