@@ -29,9 +29,9 @@ def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
     if remove_nulls:
         for index,row in df.iterrows():
             if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
-                df.at[index,'Outlet_Size'] = 'Small'
+                df.at[index,'Outlet_Size'] = 'Missing'
             elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
-                df.at[index,'Outlet_Size'] = 'Medium'
+                df.at[index,'Outlet_Size'] = 'Missing'
 
         # df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
         df = df.drop(columns=['Item_Weight'])

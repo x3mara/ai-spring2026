@@ -26,22 +26,16 @@ SEED = 442004
 #%% main functions
 
 def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
-    
-    for index,row in df.iterrows():
-        if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
-            df.at[index,'Outlet_Size'] = 'Small'
-        elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
-            df.at[index,'Outlet_Size'] = 'Small'
-        
-# some feature things 
-    df['Item_Visibility'] = np.log1p(df['Item_Visibility'])
-    df["weight_visibility"] = df["Item_Weight"] * df["Item_Visibility"]
-    df["price_per_weight"] = df["Item_MRP"] / df["Item_Weight"]
-
     if remove_nulls:
+        for index,row in df.iterrows():
+            if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
+                df.at[index,'Outlet_Size'] = 'Missing'
+            elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
+                df.at[index,'Outlet_Size'] = 'Missing'
+
         # df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
         df = df.drop(columns=['Item_Weight'])
-
+    df["mean_price_by_type"] = df.groupby("Item_Type")["Item_MRP"].transform("mean")
     df = df.drop(columns=['Item_Identifier'])
     df = pd.get_dummies(df, drop_first=True)
     return df
@@ -95,14 +89,13 @@ do_test(len_reg)
 
 #%%
 XG_reg = XGBRegressor(
-        n_estimators=2000,
-        learning_rate=0.0175,
-        max_depth=2,
+        min_child_weight=3,
+        n_estimators=1000,
+        learning_rate=0.05,
+        max_depth=3,
         early_stopping_rounds=20,
         eval_metric = 'rmse',
-        subsample=0.7,
-        colsample_bytree=1,
-        objective='reg:squarederror',
+        subsample=0.8,
         random_state=SEED
         )
 XG_reg.fit(X_train,y_train,
@@ -139,10 +132,13 @@ do_test(XG_reg,remove_nulls=False)
 # # %%
 
 # %%
+
 # %%
-rf = RandomForestRegressor(n_estimators=900, random_state=42)
+rf = RandomForestRegressor(n_estimators=900, random_state=442004)
 rf.fit(X_train, y_train)
 rf_pred = rf.predict(X_test)
 mae = mean_absolute_error(y_test, rf_pred)
 
+# %%
+print(mae)
 # %%
