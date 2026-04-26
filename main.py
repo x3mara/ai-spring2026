@@ -33,11 +33,11 @@ def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
             elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
                 df.at[index,'Outlet_Size'] = 'Missing'
 
-        # df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
-        df = df.drop(columns=['Item_Weight'])
-    df["mean_price_by_type"] = df.groupby("Item_Type")["Item_MRP"].transform("mean")
+        #df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
+    #df = df.drop(columns=['Item_Weight'])
+    #df["mean_price_by_type"] = df.groupby("Item_Type")["Item_MRP"].transform("mean")
     df = df.drop(columns=['Item_Identifier'])
-    df = pd.get_dummies(df, drop_first=True)
+    #df = pd.get_dummies(df, drop_first=True)
     return df
 
 def get_train(do_preprocess = True, remove_nulls = True):
@@ -69,14 +69,19 @@ def print_errors(model):
     mae = mean_absolute_error(y_test, predTest)
     print(f"overfit mae = {train_mae}")
     print(f"mean absolute error = {float(mae)}")
-
+    return predTest
 #%%
 
-X,y = get_train(remove_nulls=False)
+X,y = get_train(remove_nulls=True)
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size = 0.2, # ratio
-    random_state = SEED)
+from sklearn.model_selection import KFold
+
+kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
+
+for train_idx, test_idx in kf.split(X):
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+    
 
 #%%
 len_reg = Pipeline([
@@ -84,7 +89,7 @@ len_reg = Pipeline([
     ]) 
 len_reg.fit(X_train, y_train)
 
-print_errors(len_reg)
+yyy=print_errors(len_reg)
 do_test(len_reg)
 
 #%%
@@ -98,11 +103,12 @@ XG_reg = XGBRegressor(
         subsample=0.8,
         random_state=SEED
         )
+        
 XG_reg.fit(X_train,y_train,
-           eval_set=[(X_test,y_test)],
+          eval_set=[(X_test,y_test)],
            verbose=False)
 
-print_errors(XG_reg)
+xxx=print_errors(XG_reg)
 do_test(XG_reg,remove_nulls=False)
 
 # commented code that is too valuable to remove
@@ -136,9 +142,40 @@ do_test(XG_reg,remove_nulls=False)
 # %%
 rf = RandomForestRegressor(n_estimators=900, random_state=442004)
 rf.fit(X_train, y_train)
-rf_pred = rf.predict(X_test)
-mae = mean_absolute_error(y_test, rf_pred)
+zzz =rf_pred = rf.predict(X_test)
+
 
 # %%
 print(mae)
 # %%
+
+finale =(.99*xxx) +(.01*yyy)
+mae=mean_absolute_error(y_test, finale)
+print (mae)
+
+# %%
+# %%
+stringcols = X_train.select_dtypes(include='object').columns
+XG_reg = CatBoostRegressor(
+    iterations=1000,
+    learning_rate=0.05,
+    depth=6,
+    l2_leaf_reg=3,
+    loss_function='MAE'
+)
+XG_reg.fit(X_train,y_train,
+    cat_features =list(stringcols) ,
+    eval_set=(X_test,y_test),
+    verbose=False)
+
+xxx=print_errors(XG_reg)
+do_test(XG_reg,remove_nulls=True)
+# %%
+# %%
+# %%
+# %%
+print(X_train.info())
+# %%
+X_train.isnull().sum()
+# %%
+print(stringcols)
