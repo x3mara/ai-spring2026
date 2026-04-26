@@ -25,7 +25,7 @@ SEED = 442004
 
 #%% main functions
 
-def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
+def preprocess(df: pd.DataFrame, remove_nulls:bool, train_df:pd.DataFrame=None) -> pd.DataFrame:
     if remove_nulls:
         for index,row in df.iterrows():
             if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
@@ -34,9 +34,32 @@ def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
                 df.at[index,'Outlet_Size'] = 'Missing'
 
         #df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
-    #df = df.drop(columns=['Item_Weight'])
-    #df["mean_price_by_type"] = df.groupby("Item_Type")["Item_MRP"].transform("mean")
-    df = df.drop(columns=['Item_Identifier'])
+    
+    df['Outlet_Age'] = 2026 - df['Outlet_Est_Year'] 
+    df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({'LF': 'Low Fat', 'reg': 'Regular', 'low fat': 'Low Fat'})
+
+    item_types = df['Item_Type'].unique()
+    for item_type in item_types:
+        median_vis = df.loc[df['Item_Type']==item_type,'Item_Visibility'].median()
+        median_weight = df.loc[df['Item_Type']==item_type,'Item_Weight'].median()
+        df.loc[df['Item_Type']==item_type,'Item_Visibility'] = df.loc[df['Item_Type']==item_type,'Item_Visibility'].replace(0,median_vis)
+        df.loc[df['Item_Type']==item_type,'Item_Weight'] = df.loc[df['Item_Type']==item_type,'Item_Weight'].fillna(median_weight)
+
+    df['Item_Visibility_Log'] = np.log1p(df['Item_Visibility'])
+
+    # df = df.drop(columns=['Item_Weight'])
+    if 'Y' in df.columns:
+        df["Mean_Y_by_ItemType"] = df.groupby("Item_Type")["Y"].transform("mean")
+        df["Mean_Y_by_OutletType"] = df.groupby("Outlet_Type")["Y"].transform("mean")
+    else:
+        type_means = train_df.groupby('Item_Type')['Y'].mean()
+        df['Mean_Y_by_ItemType'] = df['Item_Type'].map(type_means)
+        df['Mean_Y_by_ItemType'] = df['Mean_Y_by_ItemType'].fillna(train_df['Y'].mean())
+        type_means = train_df.groupby('Outlet_Type')['Y'].mean()
+        df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(type_means)
+        df['Mean_Y_by_OutletType'] = df['Mean_Y_by_OutletType'].fillna(train_df['Y'].mean())
+
+    df = df.drop(columns=['Item_Identifier','Outlet_Identifier','Item_Visibility','Outlet_Est_Year'])
     #df = pd.get_dummies(df, drop_first=True)
     return df
 
@@ -47,22 +70,22 @@ def get_train(do_preprocess = True, remove_nulls = True):
     columns = set(df.columns)
     X = df[sorted(list(columns - {'Y'}))]
     y = df['Y']
-    return X, y
+    return X, y, df
 
-def get_test(remove_nulls=True):
+def get_test(remove_nulls=True,train_df:pd.DataFrame=None):
     df = pd.read_csv("test.csv")
-    df = preprocess(df,remove_nulls)
+    df = preprocess(df,remove_nulls,train_df=train_df)
     return df[sorted(df.columns)]
 
-def do_test(model, remove_nulls = True):
-    prediction = model.predict(get_test(remove_nulls))
+def do_test(model, train_df:pd.DataFrame, remove_nulls = True):
+    prediction = model.predict(get_test(remove_nulls,train_df=train_df))
     submission = pd.DataFrame({
         'row_id': range(0, len(prediction)),
         'Y': prediction
     })
     submission.to_csv('output.csv',index=False)
 
-def print_errors(model):
+def print_errors(model, X_train, X_test, y_train, y_test):
     predTrain = model.predict(X_train)
     train_mae = mean_absolute_error(y_train, predTrain)
     predTest = model.predict(X_test)
@@ -72,7 +95,7 @@ def print_errors(model):
     return predTest
 #%%
 
-X,y = get_train(remove_nulls=True)
+X,y,train_df = get_train(remove_nulls=True)
 
 from sklearn.model_selection import KFold
 
@@ -81,16 +104,36 @@ kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
 for train_idx, test_idx in kf.split(X):
     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-    
+
+X_train_enc = pd.get_dummies(X_train, drop_first=True)
+X_test_enc = pd.get_dummies(X_test, drop_first=True)
+
+# %%
+stringcols = X_train.select_dtypes(include='str').columns
+cat_reg = CatBoostRegressor(
+    iterations=1500,
+    learning_rate=0.05,
+    early_stopping_rounds=20,
+    depth=6,
+    l2_leaf_reg=3,
+    loss_function='MAE'
+)
+cat_reg.fit(X_train,y_train,
+    cat_features = list(stringcols),
+    eval_set=(X_test,y_test),
+    verbose=False)
+
+xxx=print_errors(cat_reg,X_train,X_test,y_train,y_test)
+do_test(cat_reg,train_df=train_df, remove_nulls=True)
 
 #%%
 len_reg = Pipeline([
     ("model", LinearRegression())
     ]) 
-len_reg.fit(X_train, y_train)
+len_reg.fit(X_train_enc, y_train)
 
-yyy=print_errors(len_reg)
-do_test(len_reg)
+yyy=print_errors(len_reg,X_train_enc,X_test_enc,y_train,y_test)
+# do_test(len_reg,train_df=train_df)
 
 #%%
 XG_reg = XGBRegressor(
@@ -111,6 +154,28 @@ XG_reg.fit(X_train,y_train,
 xxx=print_errors(XG_reg)
 do_test(XG_reg,remove_nulls=False)
 
+# %%
+rf = RandomForestRegressor(n_estimators=900, random_state=442004)
+rf.fit(X_train, y_train)
+zzz =rf_pred = rf.predict(X_test)
+
+
+# %%
+
+finale =(.99*xxx) +(.01*yyy)
+mae=mean_absolute_error(y_test, finale)
+print (mae)
+
+# %%
+# %%
+# %%
+# %%
+# %%
+print(X_train.info())
+# %%
+X_train.isnull().sum()
+# %%
+print(stringcols)
 # commented code that is too valuable to remove
 # #%% guess imputation thing
 # freq = dict()
@@ -136,45 +201,3 @@ do_test(XG_reg,remove_nulls=False)
 # # by applying this => missing is random
 # df.groupby('Item_Type')['Item_Weight'].apply(lambda x: x.isna().mean()*100) 
 # # %%
-
-# %%
-
-# %%
-rf = RandomForestRegressor(n_estimators=900, random_state=442004)
-rf.fit(X_train, y_train)
-zzz =rf_pred = rf.predict(X_test)
-
-
-# %%
-
-finale =(.99*xxx) +(.01*yyy)
-mae=mean_absolute_error(y_test, finale)
-print (mae)
-
-# %%
-# %%
-stringcols = X_train.select_dtypes(include='str').columns
-XG_reg = CatBoostRegressor(
-    iterations=1000,
-    learning_rate=0.05,
-    early_stopping_rounds=20,
-    depth=6,
-    l2_leaf_reg=3,
-    loss_function='MAE'
-)
-XG_reg.fit(X_train,y_train,
-    cat_features = list(stringcols),
-    eval_set=(X_test,y_test),
-    verbose=False)
-
-xxx=print_errors(XG_reg)
-do_test(XG_reg,remove_nulls=True)
-# %%
-# %%
-# %%
-# %%
-print(X_train.info())
-# %%
-X_train.isnull().sum()
-# %%
-print(stringcols)
