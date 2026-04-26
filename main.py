@@ -26,13 +26,14 @@ SEED = 442004
 #%% main functions
 
 def preprocess(df: pd.DataFrame, remove_nulls:bool) -> pd.DataFrame:
-    if remove_nulls:
-        for index,row in df.iterrows():
-            if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
-                df.at[index,'Outlet_Size'] = 'Small'
-            elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
-                df.at[index,'Outlet_Size'] = 'Medium'
+    
+    for index,row in df.iterrows():
+        if row['Outlet_Location_Tier'] == 'Tier 2' and row['Outlet_Type'] == 'Supermarket Type1':
+            df.at[index,'Outlet_Size'] = 'Small'
+        elif row['Outlet_Location_Tier'] == 'Tier 3' and row['Outlet_Type'] == 'Grocery Store':
+            df.at[index,'Outlet_Size'] = 'Medium'
 
+    if remove_nulls:
         # df['Item_Weight'] = df['Item_Weight'].fillna(df['Item_Weight'].median())
         df = df.drop(columns=['Item_Weight'])
 
@@ -89,13 +90,14 @@ do_test(len_reg)
 
 #%%
 XG_reg = XGBRegressor(
-        min_child_weight=3,
-        n_estimators=1000,
-        learning_rate=0.05,
-        max_depth=3,
+        n_estimators=350,
+        learning_rate=0.055,
+        max_depth=2,
         early_stopping_rounds=20,
         eval_metric = 'rmse',
-        subsample=0.8,
+        subsample=0.7,
+        colsample_bytree=1,
+        objective='reg:squarederror',
         random_state=SEED
         )
 XG_reg.fit(X_train,y_train,
