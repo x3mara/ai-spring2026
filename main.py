@@ -146,8 +146,6 @@ zzz =rf_pred = rf.predict(X_test)
 
 
 # %%
-print(mae)
-# %%
 
 finale =(.99*xxx) +(.01*yyy)
 mae=mean_absolute_error(y_test, finale)
@@ -155,16 +153,17 @@ print (mae)
 
 # %%
 # %%
-stringcols = X_train.select_dtypes(include='object').columns
+stringcols = X_train.select_dtypes(include='str').columns
 XG_reg = CatBoostRegressor(
     iterations=1000,
     learning_rate=0.05,
+    early_stopping_rounds=20,
     depth=6,
     l2_leaf_reg=3,
     loss_function='MAE'
 )
 XG_reg.fit(X_train,y_train,
-    cat_features =list(stringcols) ,
+    cat_features = list(stringcols),
     eval_set=(X_test,y_test),
     verbose=False)
 
