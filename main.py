@@ -12,13 +12,16 @@ from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_sc
 from sklearn.compose import make_column_transformer, ColumnTransformer
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler, OneHotEncoder
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler, OneHotEncoder, FunctionTransformer
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, VotingRegressor, StackingRegressor
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
 import lightgbm as lgb
+from fast_ensemble import StackingTransformer, CatBoostRegressorWrapper
 from sklearn.preprocessing import LabelEncoder
+import sklearn
+sklearn.set_config(enable_metadata_routing=True)
 SEED = 442004
 
 
@@ -59,6 +62,8 @@ def preprocess(df: pd.DataFrame, remove_nulls:bool, train_df:pd.DataFrame=None) 
         df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(type_means)
         df['Mean_Y_by_OutletType'] = df['Mean_Y_by_OutletType'].fillna(train_df['Y'].mean())
 
+    df['Price_Per_Unit_Weight'] = df['Item_MRP'] / df['Item_Weight']
+
     df = df.drop(columns=['Item_Identifier','Outlet_Identifier','Item_Visibility','Outlet_Est_Year'])
     #df = pd.get_dummies(df, drop_first=True)
     return df
@@ -93,6 +98,10 @@ def print_errors(model, X_train, X_test, y_train, y_test):
     print(f"overfit mae = {train_mae}")
     print(f"mean absolute error = {float(mae)}")
     return predTest
+
+def do_encoding(X):
+    return pd.get_dummies(X, drop_first=True)
+
 #%%
 
 X,y,train_df = get_train(remove_nulls=True)
@@ -105,21 +114,20 @@ for train_idx, test_idx in kf.split(X):
     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-X_train_enc = pd.get_dummies(X_train, drop_first=True)
-X_test_enc = pd.get_dummies(X_test, drop_first=True)
-
 # %%
-stringcols = X_train.select_dtypes(include='str').columns
+stringcols = list(X_train.select_dtypes(include='str').columns)
+stringcolidx = [X_train.columns.get_loc(col) for col in stringcols]
 cat_reg = CatBoostRegressor(
+    cat_features=stringcols,
     iterations=1500,
     learning_rate=0.05,
     early_stopping_rounds=20,
-    depth=6,
+    use_best_model=True,
+    depth=5,
     l2_leaf_reg=3,
     loss_function='MAE'
 )
 cat_reg.fit(X_train,y_train,
-    cat_features = list(stringcols),
     eval_set=(X_test,y_test),
     verbose=False)
 
@@ -128,12 +136,26 @@ do_test(cat_reg,train_df=train_df, remove_nulls=True)
 
 #%%
 len_reg = Pipeline([
+    ("dummies", FunctionTransformer(do_encoding,validate=False)),
     ("model", LinearRegression())
     ]) 
-len_reg.fit(X_train_enc, y_train)
+len_reg.fit(X_train, y_train)
 
-yyy=print_errors(len_reg,X_train_enc,X_test_enc,y_train,y_test)
+yyy=print_errors(len_reg,X_train,X_test,y_train,y_test)
 # do_test(len_reg,train_df=train_df)
+
+#%%
+stacking = StackingRegressor(
+    estimators=[
+        ('catboost',cat_reg),
+        ('linear', len_reg)
+    ],
+    final_estimator=LinearRegression(),
+    cv=5
+)
+stacking.fit(X_train,y_train)
+print_errors(stacking)
+do_test(stacking,train_df=train_df, remove_nulls=True)
 
 #%%
 XG_reg = XGBRegressor(
