@@ -126,8 +126,8 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
 
     # model
     model = CatBoostRegressor(
-        iterations=1000,
-        learning_rate=0.05,
+        iterations=3000,
+        learning_rate=0.01,
         depth=2,
         loss_function='MAE',
         random_seed=SEED,

@@ -33,7 +33,6 @@ df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({
         'low fat': 'Low Fat',
         'reg': 'Regular'
     })
-df["MRP_Outlet_Type"] = df["Item_MRP"].astype(str) + "_" + df["Outlet_Type"]
 df['Price_Per_Weight'] = df['Item_MRP'] / df['Item_Weight']
 df['MRP_Bucket'] = pd.cut(df['Item_MRP'], bins=4, labels=['Low', 'Medium', 'High', 'Premium'])
 df['Outlet_Size'] = df['Outlet_Size'].fillna('Missing')
@@ -48,13 +47,16 @@ df['Item_Category'] = df['Item_Category'].map({
 })
 df["Item_Outlet_Type"] = df["Item_Type"] + "_" + df["Outlet_Type"]
 
-df["Item_Visibility"] = np.where(
-    df["Item_Visibility"] == 0,
-    df.groupby("Item_Identifier")["Item_Visibility"].transform("mean"),
-    df["Item_Visibility"]
-)
-df["Outlet_Size"] = df["Outlet_Size"].fillna("Missing")
+train_mean_vis = df[df["Item_Visibility"] > 0].groupby("Item_Identifier")["Item_Visibility"].mean()
+mask = df["Item_Visibility"] == 0
 
+df.loc[mask, "Item_Visibility"] = df.loc[mask, "Item_Identifier"].map(train_mean_vis)
+df["Item_Visibility"] = df["Item_Visibility"].fillna(df["Item_Visibility"].mean())
+df["Outlet_Size"] = df["Outlet_Size"].fillna("Missing")
+df["Item_Visibility_MeanRatio"] = (
+    df["Item_Visibility"] /
+    df["Item_Identifier"].map(train_mean_vis)
+)
 df.drop(["Item_Identifier", "Outlet_Est_Year"], axis=1, inplace=True)
 df['Item_Visibility_Log'] = np.log1p(df['Item_Visibility'])
 
@@ -83,12 +85,12 @@ from sklearn.model_selection import KFold
 
 X = df.drop("Y", axis=1)
 y = df["Y"]
-
+# %%
 stringcols = X.select_dtypes(include=["object"]).columns.tolist()
 stringcols.append('MRP_Bucket')
 stringcols.append('Item_Outlet_Type')
 
-kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
+kf = KFold(n_splits=7, shuffle=True, random_state=SEED)
 
 scores = []
 
@@ -96,7 +98,8 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
 
     X_train, X_val = X.iloc[train_idx].copy(), X.iloc[val_idx].copy()
     y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
-   
+    X['MeanSales_ItemOutlet'] = df.groupby('Item_Outlet_Type')['Y'].transform('mean')
+
     model = CatBoostRegressor(
     iterations=1000,
     learning_rate=0.05,
@@ -152,6 +155,12 @@ dftest['Item_Fat_Content'] = dftest['Item_Fat_Content'].replace({
         'reg': 'Regular'
     })
 dftest["Item_Outlet_Type"] = dftest["Item_Type"] + "_" + dftest["Outlet_Type"]
+
+means = df.groupby('Item_Outlet_Type')['Y'].mean()
+
+dftest['MeanSales_ItemOutlet'] = dftest['Item_Outlet_Type'].map(means)
+dftest['MeanSales_ItemOutlet'] = dftest['MeanSales_ItemOutlet'].fillna(means.mean())
+
 dftest['Price_Per_Weight'] = dftest['Item_MRP'] / dftest['Item_Weight']
 dftest['MRP_Bucket'] = pd.cut(dftest['Item_MRP'], bins=4, labels=['Low', 'Medium', 'High', 'Premium'])
 dftest['Outlet_Size'] = dftest['Outlet_Size'].fillna('Missing')
@@ -166,22 +175,23 @@ dftest['Item_Category'] = dftest['Item_Category'].map({
 })
 
 
-mean_vis = df.groupby("Item_Identifier")["Item_Visibility"].transform("mean")
-dftest.loc[dftest["Item_Visibility"] == 0, "Item_Visibility"] = mean_vis[dftest["Item_Visibility"] == 0]
-dftest["Item_Visibility"] = dftest["Item_Visibility"].fillna(
-    dftest.groupby("Item_Identifier")["Item_Visibility"].transform("mean")
-)
-train_mean_vis = df.groupby("Item_Identifier")["Item_Visibility"].mean()
+
+mask = dftest["Item_Visibility"] == 0
+
+dftest.loc[mask, "Item_Visibility"] = dftest.loc[mask, "Item_Identifier"].map(train_mean_vis)
+dftest["Item_Visibility"] = dftest["Item_Visibility"].fillna(dftest["Item_Visibility"].mean())
+
 
 dftest["Item_Visibility_MeanRatio"] = (
     dftest["Item_Visibility"] /
     dftest["Item_Identifier"].map(train_mean_vis)
 )
 dftest["Outlet_Size"] = dftest["Outlet_Size"].fillna("Missing")
-dftest["MRP_Outlet_Type"] = dftest["Item_MRP"].astype(str) + "_" + dftest["Outlet_Type"]
+
 
 dftest.drop(["Item_Identifier", "Outlet_Est_Year"], axis=1, inplace=True)
 dftest['Item_Visibility_Log'] = np.log1p(dftest['Item_Visibility'])
+dftest = dftest[X.columns]
 prediction = Final_model.predict(dftest)
 submission = pd.DataFrame({
         'row_id': range(0, len(prediction)),
@@ -190,5 +200,8 @@ submission = pd.DataFrame({
 submission.to_csv('output.csv',index=False)
 
 # %%
-df.describe()
+missing_cols = set(X.columns) - set(dftest.columns)
+print(missing_cols)
+# %%
+X.describe()
 # %%
