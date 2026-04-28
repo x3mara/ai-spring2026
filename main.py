@@ -18,7 +18,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, V
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
 import lightgbm as lgb
-from fast_ensemble import StackingTransformer, CatBoostRegressorWrapper
+#from fast_ensemble import StackingTransformer, CatBoostRegressorWrapper
 from sklearn.preprocessing import LabelEncoder
 import sklearn
 sklearn.set_config(enable_metadata_routing=True)
@@ -40,11 +40,16 @@ def preprocess(df: pd.DataFrame, remove_nulls:bool, train_df:pd.DataFrame=None) 
     
     df['Outlet_Age'] = 2026 - df['Outlet_Est_Year'] 
     df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({'LF': 'Low Fat', 'reg': 'Regular', 'low fat': 'Low Fat'})
-
+    df['Item_Category'] = df['Item_Identifier'].str[:2]
+    df['Item_Category'] = df['Item_Category'].map({
+        'FD':'Food',
+        'DR':'Drinks',
+        'NC':'Non-Consumable'
+    })
     item_types = df['Item_Type'].unique()
     for item_type in item_types:
-        median_vis = df.loc[df['Item_Type']==item_type,'Item_Visibility'].median()
-        median_weight = df.loc[df['Item_Type']==item_type,'Item_Weight'].median()
+        median_vis = df.loc[df['Item_Type']==item_type,'Item_Visibility'].mean()
+        median_weight = df.loc[df['Item_Type']==item_type,'Item_Weight'].mean()
         df.loc[df['Item_Type']==item_type,'Item_Visibility'] = df.loc[df['Item_Type']==item_type,'Item_Visibility'].replace(0,median_vis)
         df.loc[df['Item_Type']==item_type,'Item_Weight'] = df.loc[df['Item_Type']==item_type,'Item_Weight'].fillna(median_weight)
 
@@ -105,34 +110,48 @@ def do_encoding(X):
 #%%
 
 X,y,train_df = get_train(remove_nulls=True)
-
 from sklearn.model_selection import KFold
+
+cat_cols = X.select_dtypes(include=["object"]).columns.tolist()
 
 kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
 
-for train_idx, test_idx in kf.split(X):
-    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+scores = []
 
-# %%
-stringcols = list(X_train.select_dtypes(include='str').columns)
-stringcolidx = [X_train.columns.get_loc(col) for col in stringcols]
-cat_reg = CatBoostRegressor(
-    cat_features=stringcols,
-    iterations=1500,
-    learning_rate=0.05,
-    early_stopping_rounds=20,
-    use_best_model=True,
-    depth=5,
-    l2_leaf_reg=3,
-    loss_function='MAE'
-)
-cat_reg.fit(X_train,y_train,
-    eval_set=(X_test,y_test),
-    verbose=False)
+for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
 
-xxx=print_errors(cat_reg,X_train,X_test,y_train,y_test)
-do_test(cat_reg,train_df=train_df, remove_nulls=True)
+    # split
+    X_train, X_val = X.iloc[train_idx].copy(), X.iloc[val_idx].copy()
+    y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+    # model
+    model = CatBoostRegressor(
+        iterations=1000,
+        learning_rate=0.05,
+        depth=2,
+        loss_function='MAE',
+        random_seed=SEED,
+        verbose=False
+    )
+
+    # train
+    model.fit(
+        X_train, y_train,
+        cat_features=cat_cols,
+        eval_set=(X_val, y_val),
+        use_best_model=True,
+        early_stopping_rounds=50
+    )
+
+    # predict
+    preds = model.predict(X_val)
+
+    # score
+    mae = mean_absolute_error(y_val, preds)
+    scores.append(mae)
+
+    print(f"Fold {fold+1} MAE: {mae}")
+print("\nFinal CV MAE:", np.mean(scores))
 
 #%%
 len_reg = Pipeline([
