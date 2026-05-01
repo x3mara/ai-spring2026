@@ -126,9 +126,13 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(X)):
 
     # model
     model = CatBoostRegressor(
-        iterations=3000,
-        learning_rate=0.01,
+        iterations=1000,
+        learning_rate=0.05,
+        early_stopping_rounds=20,
+        use_best_model=True,
         depth=2,
+        bagging_temperature=0.5,
+        l2_leaf_reg=3,
         loss_function='MAE',
         random_seed=SEED,
         verbose=False
@@ -169,7 +173,7 @@ stacking = StackingRegressor(
         ('catboost',cat_reg),
         ('linear', len_reg)
     ],
-    final_estimator=LinearRegression(),
+    final_estimator=Ridge(),
     cv=5
 )
 stacking.fit(X_train,y_train)
@@ -196,16 +200,8 @@ xxx=print_errors(XG_reg)
 do_test(XG_reg,remove_nulls=False)
 
 # %%
-rf = RandomForestRegressor(n_estimators=900, random_state=442004)
-rf.fit(X_train, y_train)
-zzz =rf_pred = rf.predict(X_test)
 
 
-# %%
-
-finale =(.99*xxx) +(.01*yyy)
-mae=mean_absolute_error(y_test, finale)
-print (mae)
 
 # %%
 # %%
