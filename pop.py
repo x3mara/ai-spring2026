@@ -217,15 +217,15 @@ final = StackingRegressor(
     estimators=[
         ('xgb', xgb),
         ('cat', catboost),
-        ('lgb', lgb),
-        ('linear', linear)
+        ('lgb', lgb)
+        # ('linear', linear)
     ],
     final_estimator=XGBRegressor(
-        n_estimators=899,
+        n_estimators=300,
         learning_rate=0.02,
         max_depth=2,
-        # subsample=0.8,
-        # colsample_bytree=0.8,
+        subsample=0.8,
+        colsample_bytree=0.8,
         objective='reg:absoluteerror',
         random_state=SEED,
         n_jobs=-1,
