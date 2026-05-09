@@ -48,14 +48,15 @@ catboost = CatBoostWrapper(
     verbose=50
 )
 
-catboost.fit(X_train, y_train)
-print_errors(catboost, X_train, y_train, X_test, y_test)
+if __name__ == "main":
+    catboost.fit(X_train, y_train)
+    print_errors(catboost, X_train, y_train, X_test, y_test)
 
-# %%
-importance_df = pd.DataFrame({
-    'feature': catboost.feature_names_,
-    'importance': catboost.feature_importances_
-}).sort_values('importance', ascending=False)
-print(importance_df.head(100))
+    # %%
+    importance_df = pd.DataFrame({
+        'feature': catboost.feature_names_,
+        'importance': catboost.feature_importances_
+    }).sort_values('importance', ascending=False)
+    print(importance_df.head(100))
 
-# %%
+    # %%

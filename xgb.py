@@ -55,19 +55,21 @@ xgb = Pipeline(
         ))
     ]
 )
-xgb.fit(X_train, y_train)
-print_errors(xgb, X_train, y_train, X_test, y_test)
-# do_test(xgb, train_df)
 
-#%% get xgboost importance
+if __name__ == "__main__":
+    xgb.fit(X_train, y_train)
+    print_errors(xgb, X_train, y_train, X_test, y_test)
+    # do_test(xgb, train_df)
 
-preprocessor = xgb.named_steps['enc']
+    #%% get xgboost importance
 
-feature_names = preprocessor.get_feature_names_out()
+    preprocessor = xgb.named_steps['enc']
 
-xgb_model = xgb.named_steps['model']
-importance_df = pd.DataFrame({
-    'feature': feature_names,
-    'importance': xgb_model.feature_importances_
-}).sort_values('importance', ascending=False)
-print(importance_df.head(100))
+    feature_names = preprocessor.get_feature_names_out()
+
+    xgb_model = xgb.named_steps['model']
+    importance_df = pd.DataFrame({
+        'feature': feature_names,
+        'importance': xgb_model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    print(importance_df.head(100))

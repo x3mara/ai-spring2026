@@ -25,3 +25,4 @@ final = StackingRegressor(
 )
 final.fit(X_train,y_train)
 print_errors(final,X_train,y_train,X_test,y_test)
+# %%

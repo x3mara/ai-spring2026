@@ -53,15 +53,17 @@ lgb = Pipeline(
         ))
     ]
 )
-lgb.fit(X_train, y_train)
-print_errors(lgb, X_train, y_train, X_test, y_test)
+
+if __name__ == "main":
+    lgb.fit(X_train, y_train)
+    print_errors(lgb, X_train, y_train, X_test, y_test)
 
 #%%
-preprocessor = lgb.named_steps['enc']
-feature_names = preprocessor.get_feature_names_out()
-lgb_model = lgb.named_steps['model']
-importance_df = pd.DataFrame({
-    'feature': feature_names,
-    'importance': lgb_model.feature_importances_
-}).sort_values('importance', ascending=False)
-print(importance_df.head(10))
+    preprocessor = lgb.named_steps['enc']
+    feature_names = preprocessor.get_feature_names_out()
+    lgb_model = lgb.named_steps['model']
+    importance_df = pd.DataFrame({
+        'feature': feature_names,
+        'importance': lgb_model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    print(importance_df.head(10))
