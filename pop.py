@@ -38,6 +38,7 @@ def preprocess(df: pd.DataFrame, train_df:pd.DataFrame=None) -> pd.DataFrame:
     df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({'LF': 'Low Fat', 'reg': 'Regular', 'low fat': 'Low Fat'})
     df.loc[df['Item_Identifier'].str.startswith('NC'), 'Item_Fat_Content'] = 'Non-Edible'
     df['Item_Category'] = df['Item_Identifier'].str[:2]
+    df['Item_Category'].replace({'DR':'FD'})
     # df['MRP_Bucket'] = pd.cut(df['Item_MRP'], bins=4, labels=['Low', 'Medium', 'High', 'Premium'])
 
     df['Item_Weight'] = df['Item_Weight'].fillna(
@@ -137,8 +138,14 @@ encoder = ColumnTransformer(
 
 #%% catboost
 
-cat_selected_cols = cat_cols + ['Item_MRP']
-
+cat_selected_cols = [
+    'Item_Category', 'Item_Fat_Content',
+    'Item_Identifier', 'Item_Type',
+    'Outlet_Identifier', 'Outlet_Location_Tier',
+    'Outlet_Size', 'Outlet_Type',
+    'Item_MRP',
+    # 'Price_Per_Unit_Weight', 'Item_Weight'
+]
 class CatBoostWrapper(CatBoostRegressor):
     def __init__(self, **kwargs):
         self.eval_set = (X_test[cat_selected_cols], y_test)
@@ -166,26 +173,6 @@ catboost = CatBoostWrapper(
     loss_function='MAE',
     verbose=False
 )
-
-# param_grid = {
-#     'iterations': [500, 700, 1000, 1200, 1500, 2000],
-#     'learning_rate': [0.01, 0.02, 0.04, 0.08],
-#     'depth': [2,3,4],
-#     'bagging_temperature': [0.5, 1],
-#     'l2_leaf_reg': [3,5,7]
-# }
-
-# grid = GridSearchCV(
-#     catboost,
-#     param_grid,
-#     cv=5,
-#     scoring='neg_mean_absolute_error',
-#     refit=True
-# )
-# grid.fit(X_train,y_train)
-
-# print(grid.best_params_)
-# print(f'Best MAE: {-grid.best_score_}')
 
 catboost.fit(X_train, y_train)
 print_errors(catboost, X_train, y_train, X_test, y_test)
@@ -333,3 +320,24 @@ final.fit(X,y)
 do_test(final, train_df)
 
 # %%
+
+
+# param_grid = {
+#     'iterations': [500, 700, 1000, 1200, 1500, 2000],
+#     'learning_rate': [0.01, 0.02, 0.04, 0.08],
+#     'depth': [2,3,4],
+#     'bagging_temperature': [0.5, 1],
+#     'l2_leaf_reg': [3,5,7]
+# }
+
+# grid = GridSearchCV(
+#     catboost,
+#     param_grid,
+#     cv=5,
+#     scoring='neg_mean_absolute_error',
+#     refit=True
+# )
+# grid.fit(X_train,y_train)
+
+# print(grid.best_params_)
+# print(f'Best MAE: {-grid.best_score_}')
