@@ -40,6 +40,9 @@ def preprocess(df: pd.DataFrame, train_df:pd.DataFrame=None) -> pd.DataFrame:
     df['Item_Category'] = df['Item_Identifier'].str[:2]
     df['Item_Category'].replace({'DR':'FD'})
     # df['MRP_Bucket'] = pd.cut(df['Item_MRP'], bins=4, labels=['Low', 'Medium', 'High', 'Premium'])
+    df['MRP_OutletType'] = df.groupby('Outlet_Type')['Item_MRP'].transform('mean')
+    df['Outlet_Avg_MRP'] = df.groupby('Outlet_Identifier')['Item_MRP'].transform('mean')
+    df['Item_Price_Rank'] = df.groupby('Item_Category')['Item_MRP'].rank(pct=True)
 
     df['Item_Weight'] = df['Item_Weight'].fillna(
         df.groupby('Item_Identifier')['Item_Weight'].transform('mean')
@@ -140,11 +143,13 @@ encoder = ColumnTransformer(
 
 cat_selected_cols = [
     'Item_Category', 'Item_Fat_Content',
-    'Item_Identifier', 'Item_Type',
-    'Outlet_Identifier', 'Outlet_Location_Tier',
-    'Outlet_Size', 'Outlet_Type',
-    'Item_MRP',
-    # 'Price_Per_Unit_Weight', 'Item_Weight'
+    'Item_Identifier',  # UNCOMMENT THIS
+    'Item_Type',
+    'Item_Visibility_Log',  # UNCOMMENT THIS
+    'Outlet_Location_Tier', 'Outlet_Size',
+    'Outlet_Type',  # UNCOMMENT THIS
+    'Item_MRP', 'MRP_OutletType', 
+    'Outlet_Avg_MRP', 'Item_Price_Rank'
 ]
 class CatBoostWrapper(CatBoostRegressor):
     def __init__(self, **kwargs):
@@ -164,14 +169,14 @@ class CatBoostWrapper(CatBoostRegressor):
     
 catboost = CatBoostWrapper(
     iterations=1000,
-    learning_rate=0.02,
-    early_stopping_rounds=20,
+    learning_rate=0.03,
+    early_stopping_rounds=100,
     use_best_model=True,
-    depth=2,
-    bagging_temperature=0.5,
-    l2_leaf_reg=3,
+    depth=6,
+    l2_leaf_reg=6,
     loss_function='MAE',
-    verbose=False
+    eval_metric='MAE',
+    verbose=50
 )
 
 catboost.fit(X_train, y_train)
