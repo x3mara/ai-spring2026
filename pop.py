@@ -166,6 +166,27 @@ catboost = CatBoostWrapper(
     loss_function='MAE',
     verbose=False
 )
+
+# param_grid = {
+#     'iterations': [500, 700, 1000, 1200, 1500, 2000],
+#     'learning_rate': [0.01, 0.02, 0.04, 0.08],
+#     'depth': [2,3,4],
+#     'bagging_temperature': [0.5, 1],
+#     'l2_leaf_reg': [3,5,7]
+# }
+
+# grid = GridSearchCV(
+#     catboost,
+#     param_grid,
+#     cv=5,
+#     scoring='neg_mean_absolute_error',
+#     refit=True
+# )
+# grid.fit(X_train,y_train)
+
+# print(grid.best_params_)
+# print(f'Best MAE: {-grid.best_score_}')
+
 catboost.fit(X_train, y_train)
 print_errors(catboost, X_train, y_train, X_test, y_test)
 # do_test(catboost, train_df)
