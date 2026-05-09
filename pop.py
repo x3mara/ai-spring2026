@@ -59,25 +59,25 @@ def preprocess(df: pd.DataFrame, train_df:pd.DataFrame=None) -> pd.DataFrame:
     
     if 'Y' in df.columns:
         global_mean = df['Y'].mean()
-        item_stats = df.groupby('Item_Type')['Y'].agg(['count', 'mean'])
-        item_smoothed = (item_stats['count'] * item_stats['mean'] + m * global_mean) / (item_stats['count'] + m)
-        df['Mean_Y_by_ItemType'] = df['Item_Type'].map(item_smoothed)
+        # item_stats = df.groupby('Item_Type')['Y'].agg(['count', 'mean'])
+        # item_smoothed = (item_stats['count'] * item_stats['mean'] + m * global_mean) / (item_stats['count'] + m)
+        # df['Mean_Y_by_ItemType'] = df['Item_Type'].map(item_smoothed)
         outlet_stats = df.groupby('Outlet_Type')['Y'].agg(['count', 'mean'])
         outlet_smoothed = (outlet_stats['count'] * outlet_stats['mean'] + m * global_mean) / (outlet_stats['count'] + m)
         df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(outlet_smoothed)
 
     elif train_df is not None:
         global_mean = train_df['Y'].mean()
-        item_stats = train_df.groupby('Item_Type')['Y'].agg(['count', 'mean'])
-        item_smoothed = (item_stats['count'] * item_stats['mean'] + m * global_mean) / (item_stats['count'] + m)
-        df['Mean_Y_by_ItemType'] = df['Item_Type'].map(item_smoothed).fillna(global_mean)
+        # item_stats = train_df.groupby('Item_Type')['Y'].agg(['count', 'mean'])
+        # item_smoothed = (item_stats['count'] * item_stats['mean'] + m * global_mean) / (item_stats['count'] + m)
+        # df['Mean_Y_by_ItemType'] = df['Item_Type'].map(item_smoothed).fillna(global_mean)
         outlet_stats = train_df.groupby('Outlet_Type')['Y'].agg(['count', 'mean'])
         outlet_smoothed = (outlet_stats['count'] * outlet_stats['mean'] + m * global_mean) / (outlet_stats['count'] + m)
         df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(outlet_smoothed).fillna(global_mean)
     
     df['Price_Per_Unit_Weight'] = df['Item_MRP'] / df['Item_Weight']
 
-    df = df.drop(columns=['Item_Visibility','Outlet_Est_Year'])
+    df = df.drop(columns=['Item_Visibility','Outlet_Est_Year','Outlet_Age'])
 
     return df
 
@@ -117,6 +117,10 @@ def do_encoding(X):
 #%% initialize
 
 X,y,train_df = get_train()
+
+for col in train_df.select_dtypes(include=["object","str"]).columns:
+    train_df[col] = train_df[col].astype("category")
+
 cat_cols = X.select_dtypes(include=["object","string","category"]).columns.tolist()
 numeric_cols = X.select_dtypes(include=['int64', 'float64']).columns.to_list()
 
@@ -175,11 +179,15 @@ print(importance_df.head(100))
 
 #%% xgb
 
-xgb_selected_cols = numeric_cols
+xgb_selected_cols = [
+    'Mean_Y_by_OutletType', 'Item_MRP',
+    'Price_Per_Unit_Weight', 'Item_Weight',
+    'Item_Visibility_Log'
+]
 
 xgb_encoder = ColumnTransformer(
     transformers=[
-        ('num', StandardScaler(), X[xgb_selected_cols].select_dtypes(include=['int64', 'float64']).columns),
+        ('num', 'passthrough', X[xgb_selected_cols].select_dtypes(include=['int64', 'float64']).columns),
         ('cat', OneHotEncoder(handle_unknown='ignore'),X[xgb_selected_cols].select_dtypes(include=["object","string","category"]).columns.tolist())
     ],
     remainder='drop'
@@ -229,27 +237,42 @@ importance_df = pd.DataFrame({
 }).sort_values('importance', ascending=False)
 print(importance_df.head(100))
 
-
-#%% linear dumb
-linear = Pipeline(
-    steps=[
-        ('enc', encoder),
-        ('model',LinearRegression())
-    ]
-)
-linear.fit(X_train, y_train)
-print_errors(linear, X_train, y_train, X_test, y_test)
-
 #%% LGB
+
+lgbm_selected_cols = [
+    'Item_MRP', 'Mean_Y_by_OutletType',
+    'Price_Per_Unit_Weight', 'Item_Weight'
+]
+
+lgbm_encoder = ColumnTransformer(
+    transformers=[
+        ('num', 'passthrough', X[lgbm_selected_cols].select_dtypes(include=['int64', 'float64']).columns),
+        ('cat', OneHotEncoder(handle_unknown='ignore'),X[lgbm_selected_cols].select_dtypes(include=["object","string","category"]).columns.tolist())
+    ],
+    remainder='drop'
+)
+class LGBMRegressorWrapper(LGBMRegressor):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    def fit(self, X, y, **fit_params):
+        X_test_enc = lgbm_encoder.transform(X_test[lgbm_selected_cols])
+        self.eval_set = [(X_test_enc, y_test)]
+        return super().fit(X, y,
+                              eval_set=self.eval_set,
+                              categorical_feature='auto',
+                              callbacks=[lgb.log_evaluation(0)],
+                              **fit_params)
+    def predict(self, X):
+        return super().predict(X)
 
 lgb = Pipeline(
     steps=[
-        ('enc', encoder),
+        ('enc',lgbm_encoder),
         ('model',LGBMRegressor(
-            n_estimators=300,
+            n_estimators=200,
             learning_rate=0.025,
             max_depth=2,
-            # num_leaves=15,
+            # num_leaves=63,
             objective='mae',
             random_state=42,
             verbose=-1
@@ -260,29 +283,25 @@ lgb.fit(X_train, y_train)
 print_errors(lgb, X_train, y_train, X_test, y_test)
 
 #%%
-lgb.fit(X,y)
-do_test(lgb, train_df)
+preprocessor = lgb.named_steps['enc']
+feature_names = preprocessor.get_feature_names_out()
+lgb_model = lgb.named_steps['model']
+importance_df = pd.DataFrame({
+    'feature': feature_names,
+    'importance': lgb_model.feature_importances_
+}).sort_values('importance', ascending=False)
+print(importance_df.head(10))
 
 #%%
 
 final = StackingRegressor(
     estimators=[
         ('xgb', xgb),
-        ('cat', catboost)
-        # ('lgb', lgb)
+        ('cat', catboost),
+        ('lgb', lgb)
         # ('linear', linear)
     ],
-    final_estimator=XGBRegressor(
-        n_estimators=500,
-        learning_rate=0.02,
-        max_depth=2,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        objective='reg:absoluteerror',
-        random_state=SEED,
-        n_jobs=-1,
-        verbosity=0
-    ),
+    final_estimator=LinearRegression(),
     cv=KFold(n_splits=7, shuffle=True, random_state=42)
 )
 final.fit(X_train,y_train)
