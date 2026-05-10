@@ -1,3 +1,4 @@
+#%%
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -30,11 +31,7 @@ def preprocess(df: pd.DataFrame, train_df:pd.DataFrame=None) -> pd.DataFrame:
     df['Item_Fat_Content'] = df['Item_Fat_Content'].replace({'LF': 'Low Fat', 'reg': 'Regular', 'low fat': 'Low Fat'})
     df.loc[df['Item_Identifier'].str.startswith('NC'), 'Item_Fat_Content'] = 'Non-Edible'
     df['Item_Category'] = df['Item_Identifier'].str[:2]
-    df['Item_Category'].replace({'DR':'FD'})
-    # df['MRP_Bucket'] = pd.cut(df['Item_MRP'], bins=4, labels=['Low', 'Medium', 'High', 'Premium'])
-    df['MRP_OutletType'] = df.groupby('Outlet_Type')['Item_MRP'].transform('mean')
-    df['Outlet_Avg_MRP'] = df.groupby('Outlet_Identifier')['Item_MRP'].transform('mean')
-    df['Item_Price_Rank'] = df.groupby('Item_Category')['Item_MRP'].rank(pct=True)
+    df['Item_Category'] = df['Item_Category'].replace({'DR':'FD'})
 
     df['Item_Weight'] = df['Item_Weight'].fillna(
         df.groupby('Item_Identifier')['Item_Weight'].transform('mean')
@@ -51,29 +48,34 @@ def preprocess(df: pd.DataFrame, train_df:pd.DataFrame=None) -> pd.DataFrame:
     df['Item_Visibility_Log'] = np.log1p(df['Item_Visibility'])
 
     # df = df.drop(columns=['Item_Weight'])
-    m = 10
-    
+
     if 'Y' in df.columns:
-        global_mean = df['Y'].mean()
-        # item_stats = df.groupby('Item_Type')['Y'].agg(['count', 'mean'])
-        # item_smoothed = (item_stats['count'] * item_stats['mean'] + m * global_mean) / (item_stats['count'] + m)
-        # df['Mean_Y_by_ItemType'] = df['Item_Type'].map(item_smoothed)
-        outlet_stats = df.groupby('Outlet_Type')['Y'].agg(['count', 'mean'])
-        outlet_smoothed = (outlet_stats['count'] * outlet_stats['mean'] + m * global_mean) / (outlet_stats['count'] + m)
-        df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(outlet_smoothed)
+        df["Mean_Y_by_ItemType"] = df.groupby("Item_Type")["Y"].transform("mean")
+        df["Mean_Y_by_OutletType"] = df.groupby("Outlet_Type")["Y"].transform("mean")
+    else:
+        type_means = train_df.groupby('Item_Type')['Y'].mean()
+        df['Mean_Y_by_ItemType'] = df['Item_Type'].map(type_means)
+        df['Mean_Y_by_ItemType'] = df['Mean_Y_by_ItemType'].fillna(train_df['Y'].mean())
+        type_means = train_df.groupby('Outlet_Type')['Y'].mean()
+        df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(type_means)
+        df['Mean_Y_by_OutletType'] = df['Mean_Y_by_OutletType'].fillna(train_df['Y'].mean())
 
-    elif train_df is not None:
-        global_mean = train_df['Y'].mean()
-        # item_stats = train_df.groupby('Item_Type')['Y'].agg(['count', 'mean'])
-        # item_smoothed = (item_stats['count'] * item_stats['mean'] + m * global_mean) / (item_stats['count'] + m)
-        # df['Mean_Y_by_ItemType'] = df['Item_Type'].map(item_smoothed).fillna(global_mean)
-        outlet_stats = train_df.groupby('Outlet_Type')['Y'].agg(['count', 'mean'])
-        outlet_smoothed = (outlet_stats['count'] * outlet_stats['mean'] + m * global_mean) / (outlet_stats['count'] + m)
-        df['Mean_Y_by_OutletType'] = df['Outlet_Type'].map(outlet_smoothed).fillna(global_mean)
-    
+    # MRP habal
+    df['Outlet_Type_Avg_MRP'] = df.groupby('Outlet_Type')['Item_MRP'].transform('mean')
+    df['Outlet_Avg_MRP'] = df.groupby('Outlet_Identifier')['Item_MRP'].transform('mean')
     df['Price_Per_Unit_Weight'] = df['Item_MRP'] / df['Item_Weight']
+    df['MRP_Squared'] = df['Item_MRP'] ** 2 
+    df['Item_Price_Rank'] = df.groupby('Item_Category')['Item_MRP'].rank(pct=True)
+    df['MRP_Outlet_Rank'] = df.groupby('Outlet_Identifier')['Item_MRP'].rank(pct=True)
 
-    df = df.drop(columns=['Item_Visibility','Outlet_Est_Year','Outlet_Age'])
+    df['MRP_x_OutletType_Mean'] = df['Item_MRP'] * df['Outlet_Type_Avg_MRP']
+    df['Visibility_x_MRP'] = df['Item_Visibility_Log'] * df['Item_MRP']
+    df['OutletAge_x_MRP'] = df['Outlet_Age'] * df['Item_MRP']
+
+    df = df.drop(columns=[
+        'Item_Visibility',
+        'Outlet_Est_Year'
+    ])
 
     return df
 
@@ -106,3 +108,5 @@ def print_errors(model, X_train, y_train, X_test, y_test):
     print(f"overfit mae = {train_mae}")
     print(f"mean absolute error = {float(mae)}")
     # return predTest
+
+# %%

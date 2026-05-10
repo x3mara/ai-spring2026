@@ -13,10 +13,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 #%%
 
-lgbm_selected_cols = [
-    'Item_MRP', 'Mean_Y_by_OutletType',
-    'Price_Per_Unit_Weight', 'Item_Weight'
-]
+lgbm_selected_cols = list(X.columns)
 
 lgbm_encoder = ColumnTransformer(
     transformers=[
@@ -46,7 +43,6 @@ lgb = Pipeline(
             n_estimators=200,
             learning_rate=0.025,
             max_depth=2,
-            # num_leaves=63,
             objective='mae',
             random_state=42,
             verbose=-1
@@ -54,7 +50,7 @@ lgb = Pipeline(
     ]
 )
 
-if __name__ == "main":
+if __name__ == "__main__":
     lgb.fit(X_train, y_train)
     print_errors(lgb, X_train, y_train, X_test, y_test)
 

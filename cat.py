@@ -8,18 +8,12 @@ for col in train_df.select_dtypes(include=["object","str"]).columns:
     train_df[col] = train_df[col].astype("category")
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size = 0.2, random_state = SEED)
+    X, y, test_size = 0.4, random_state = SEED)
 
-cat_selected_cols = [
-    'Item_Category', 'Item_Fat_Content',
-    'Item_Identifier',
-    'Item_Type',
-    'Item_Visibility_Log', 
-    'Outlet_Location_Tier', 'Outlet_Size',
-    'Outlet_Type',
-    'Item_MRP', 'MRP_OutletType', 
-    'Outlet_Avg_MRP', 'Item_Price_Rank'
-]
+cat_selected_cols = list(set(X.columns) - {
+    'Outlet_Age', 'Item_Visibility_Log',
+    'Item_Category'
+})
 class CatBoostWrapper(CatBoostRegressor):
     def __init__(self, **kwargs):
         self.eval_set = (X_test[cat_selected_cols], y_test)
@@ -36,19 +30,19 @@ class CatBoostWrapper(CatBoostRegressor):
         tX = X[self.selected_cols]
         return super().predict(tX)
     
+
+parameters = {'iterations': 2687, 'learning_rate': 0.033185172403253055, 'depth': 5, 'l2_leaf_reg': 6.399997843760245, 'random_strength': 1.2123755372540275, 'bagging_temperature': 6.238078864034788, 'border_count': 172}
+
 catboost = CatBoostWrapper(
-    iterations=1000,
-    learning_rate=0.03,
-    early_stopping_rounds=100,
-    use_best_model=True,
-    depth=6,
-    l2_leaf_reg=6,
-    loss_function='MAE',
-    eval_metric='MAE',
+    **parameters,
+    early_stopping_rounds = 100,
+    use_best_model = True,
+    loss_function = 'MAE',
+    eval_metric = 'MAE',
     verbose=50
 )
 
-if __name__ == "main":
+if __name__ == "__main__":
     catboost.fit(X_train, y_train)
     print_errors(catboost, X_train, y_train, X_test, y_test)
 
@@ -59,4 +53,10 @@ if __name__ == "main":
     }).sort_values('importance', ascending=False)
     print(importance_df.head(100))
 
+    #%%
+    do_test(catboost, train_df)
+
     # %%
+    catboost.fit(X,y)
+    do_test(catboost, train_df)
+# %%
