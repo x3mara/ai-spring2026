@@ -10,10 +10,7 @@ for col in train_df.select_dtypes(include=["object","str"]).columns:
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size = 0.4, random_state = SEED)
 
-cat_selected_cols = list(set(X.columns) - {
-    'Outlet_Age', 'Item_Visibility_Log',
-    'Item_Category'
-})
+cat_selected_cols = list(X.columns)
 class CatBoostWrapper(CatBoostRegressor):
     def __init__(self, **kwargs):
         self.eval_set = (X_test[cat_selected_cols], y_test)
